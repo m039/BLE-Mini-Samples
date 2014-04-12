@@ -1,14 +1,4 @@
-#include <termios.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/signal.h>
-#include <sys/types.h>
-#include <strings.h>
-
-#define BAUDRATE B57600
+#include "main.h"
 
 /**
  * Functions
@@ -112,40 +102,42 @@ void device_loop() {
     tcflush(g_device_fd, TCIFLUSH);
     tcsetattr(g_device_fd,TCSANOW,&new_termios);
 
+#ifdef DEBUG
+    fprintf(stderr, "Waiting for data:\n");
+#endif
+
     while (g_loop == false) {
         usleep(10000);
 
         if (g_received == false) {
-            device_process_input(buf, read(g_device_fd, buf, 255));
-            g_received = true;      /* wait for new input */
+            int count;
+
+            count = read(g_device_fd, buf, 255);
+            if (count >= 1) {
+                device_process_input(buf, count);
+            }
+
+            g_received = true;
         }
 
         fflush(stdout);
     }
 
-    /* restore old port settings */
     tcsetattr(g_device_fd, TCSANOW, &old_termios);
 }
 
-char * to_hex(const char *data, size_t length) {
-    char *out = malloc(length * 4);
-
-    if (out != NULL) {
-        int i;
-        char *p = out;
-        for (i = 0; i < length; i++) {
-            sprintf(p, "%02x ", data[i]);
-            p += 4;
-        }
-    }
-
-    return out;
-}
-
 void device_process_input(char *data, int received_count) {
+#ifdef DEBUG
+
+#if USE_HEX == 1
     char *dump = to_hex(data, received_count);
-    fprintf(stderr, "received %d count: %s\n", received_count, dump);
+    fprintf(stderr, "  received %d count: %s\n", received_count, dump);
     free(dump);
+#else
+    fprintf(stderr, "  received %d count: %.*s\n", received_count, received_count - 1, data + 1);
+#endif
+
+#endif
 }
 
 void device_close() {
@@ -153,6 +145,10 @@ void device_close() {
         perror(g_device_path);
         exit_failure();
     }
+
+#ifdef DEBUG
+    fprintf(stderr, "Bye bye\n");
+#endif    
 }
 
 /**
